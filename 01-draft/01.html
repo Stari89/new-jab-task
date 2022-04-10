@@ -1,202 +1,264 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Draft 01</title>
-        <script>
-            const assertType = (value, type) => {
-                if (value.constructor.name !== type) {
-                    throw new Error(`Value is not a type of ${type}`);
-                }
-            };
-            const assertInteger = (value) => {
-                if (!Number.isInteger(value)) {
-                    throw new Error('Value is not an integer');
-                }
-            };
-            const assertMin = (value, min) => {
-                if (value < min) {
-                    throw new Error(`${value} is less than ${min}`);
-                }
-            };
-            const assertEmpty = (value) => {
-                if (!value) {
-                    throw new Error('Value is empty');
-                }
-            };
-            const assertAnyEqualToFirst = (value, ...compare) => {
-                if (!compare.some((c) => c === value)) {
-                    throw new Error('Value is not equal to comparisons');
-                }
-            };
-            const assertAllEqual = (...values) => {
-                values.reduce((prev, curr, idx) => {
-                    if (idx === 0) {
-                        return curr;
-                    }
-                    if (prev !== curr) {
-                        throw new Error('All values are not equal');
-                    }
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Draft 01</title>
+    <script>
+        const assertType = (value, type) => {
+            if (value.constructor.name !== type) {
+                throw new Error(`Value is not a type of ${type}`);
+            }
+        };
+        const assertInteger = (value) => {
+            if (!Number.isInteger(value)) {
+                throw new Error('Value is not an integer');
+            }
+        };
+        const assertMin = (value, min) => {
+            if (value < min) {
+                throw new Error(`${value} is less than ${min}`);
+            }
+        };
+        const assertEmpty = (value) => {
+            if (!value) {
+                throw new Error('Value is empty');
+            }
+        };
+        const assertAnyEqualToFirst = (value, ...compare) => {
+            if (!compare.some((c) => c === value)) {
+                throw new Error('Value is not equal to comparisons');
+            }
+        };
+        const assertAllEqual = (...values) => {
+            values.reduce((prev, curr, idx) => {
+                if (idx === 0) {
                     return curr;
-                });
-            };
-            const assertArray = (arr) => {
-                if (!Array.isArray(arr)) {
-                    throw new Error('Value is not an array');
                 }
-            };
-            const assertArrayItems = (arr, ...assertFunctions) => {
-                arr.forEach((item) => {
-                    assertFunctions.forEach((assertFn) => {
-                        assertFn(item);
+                if (prev !== curr) {
+                    throw new Error('All values are not equal');
+                }
+                return curr;
+            });
+        };
+        const assertArray = (arr) => {
+            if (!Array.isArray(arr)) {
+                throw new Error('Value is not an array');
+            }
+        };
+        const assertArrayItems = (arr, ...assertFunctions) => {
+            arr.forEach((item) => {
+                assertFunctions.forEach((assertFn) => {
+                    assertFn(item);
+                });
+            });
+        };
+        const assertUniqueItemsInArray = (arr) => {
+            if (arr.length !== arr.filter(unique).length) {
+                throw new Error('Array items are not unique');
+            }
+        };
+        const unique = (value, idx, self) => {
+            return self.indexOf(value) === idx;
+        };
+
+        const validateInput = (plateSize, samples, reagents, replications, maxNumberOfPlates) => {
+            // plateSize
+            assertAnyEqualToFirst(plateSize, 96, 384);
+
+            // samples
+            assertArray(samples);
+            assertArrayItems(samples, assertArray, (samplesList) =>
+                assertArrayItems(samplesList, (sample) => assertType(sample, 'String'), assertEmpty)
+            );
+
+            // reagents
+            assertArray(reagents);
+            assertArrayItems(
+                reagents,
+                assertArray,
+                (reagentsList) =>
+                    assertArrayItems(reagentsList, (reagent) => assertType(reagent, 'String'), assertEmpty),
+                assertUniqueItemsInArray
+            );
+
+            // replications
+            assertArray(replications);
+            assertArrayItems(
+                replications,
+                (item) => assertType(item, 'Number'),
+                assertInteger,
+                (item) => assertMin(item, 1)
+            );
+
+            // Do samples, reagents and replications have the same number of experiments
+            assertAllEqual(samples.length, reagents.length, replications.length);
+
+            // maxNumberOfPlates
+            assertType(maxNumberOfPlates, 'Number');
+            assertInteger(maxNumberOfPlates);
+            assertMin(1);
+
+            // Do we have enough plates?
+            const availableWells = maxNumberOfPlates * plateSize;
+            const requiredWells = samples.reduce(
+                (prev, curr, idx) => prev + samples[idx].length * reagents[idx].length * replications[idx],
+                0
+            );
+            if (requiredWells > availableWells) {
+                throw new Error('maxNumberOfPlates does not provide enough wells for experiments');
+            }
+        };
+
+        const PREFERRED_PACKING_X = ['replications', 'reagents'];
+        const PREFERRED_PACKING_Y = ['samples'];
+        class Block {
+            constructor(samples, reagents, replications) {
+                this.samples = samples;
+                this.reagents = reagents;
+                this.replications = replications;
+                this.packX = PREFERRED_PACKING_X;
+                this.packY = PREFERRED_PACKING_Y;
+            }
+            get width() {
+                let x = 1;
+                if (this.packX.indexOf('samples') >= 0) {
+                    x *= this.samples.length;
+                }
+                if (this.packX.indexOf('replications') >= 0) {
+                    x *= this.replications;
+                }
+                if (this.packX.indexOf('reagents') >= 0) {
+                    x *= this.reagents.length;
+                }
+                return x;
+            }
+            get height() {
+                let y = 1;
+                if (this.packY.indexOf('samples') >= 0) {
+                    y *= this.samples.length;
+                }
+                if (this.packY.indexOf('replications') >= 0) {
+                    y *= this.replications;
+                }
+                if (this.packY.indexOf('reagents') >= 0) {
+                    y *= this.reagents.length;
+                }
+                return y;
+            }
+            get area() {
+                return this.width * this.height;
+            }
+        }
+
+        class Level {
+            constructor() {
+                this.blocks = [];
+            }
+            get height() {
+                return this.blocks.reduce((prev, curr) => prev > curr.height ? prev : curr.height, 0);
+            }
+            get width() {
+                return this.blocks.reduce((prev, curr) => prev + curr.width, 0);
+            }
+        }
+
+        class Bin {
+            constructor(size) {
+                if (size === 96) {
+                    this.width = 12;
+                    this.height = 8;
+                } else {
+                    this.width = 24;
+                    this.height = 16;
+                }
+                this.levels = [];
+            }
+
+            fits(block) {
+                assertType(block, 'Block');
+                if (block.width > this.width || block.height > this.height) {
+                    return false;
+                }
+            }
+        }
+
+        const SPLIT_BY_ORDER = ['reagents', 'samples', 'replications'];
+        const splitBlock = (block, splitBy) => {
+            assertType(block, 'Block');
+            assertType(splitBy, 'String');
+            assertAnyEqualToFirst(splitBy, ...SPLIT_BY_ORDER);
+
+            const result = [];
+            switch (splitBy) {
+                case 'reagents':
+                    block.reagents.forEach(r => {
+                        result.push(new Block(block.samples, [r], block.replications))
                     });
-                });
-            };
-            const assertUniqueItemsInArray = (arr) => {
-                if (arr.length !== arr.filter(unique).length) {
-                    throw new Error('Array items are not unique');
-                }
-            };
-            const unique = (value, idx, self) => {
-                return self.indexOf(value) === idx;
-            };
-
-            window.onload = () => {
-                const validateInput = (plateSize, samples, reagents, replications, maxNumberOfPlates) => {
-                    // plateSize
-                    assertAnyEqualToFirst(plateSize, 96, 384);
-
-                    // samples
-                    assertArray(samples);
-                    assertArrayItems(samples, assertArray, (samplesList) =>
-                        assertArrayItems(samplesList, (sample) => assertType(sample, 'String'), assertEmpty)
-                    );
-
-                    // reagents
-                    assertArray(reagents);
-                    assertArrayItems(
-                        reagents,
-                        assertArray,
-                        (reagentsList) =>
-                            assertArrayItems(reagentsList, (reagent) => assertType(reagent, 'String'), assertEmpty),
-                        assertUniqueItemsInArray
-                    );
-
-                    // replications
-                    assertArray(replications);
-                    assertArrayItems(
-                        replications,
-                        (item) => assertType(item, 'Number'),
-                        assertInteger,
-                        (item) => assertMin(item, 1)
-                    );
-
-                    // Do samples, reagents and replications have the same number of experiments
-                    assertAllEqual(samples.length, reagents.length, replications.length);
-
-                    // maxNumberOfPlates
-                    assertType(maxNumberOfPlates, 'Number');
-                    assertInteger(maxNumberOfPlates);
-                    assertMin(1);
-
-                    // Do we have enough plates?
-                    const availableWells = maxNumberOfPlates * plateSize;
-                    const requiredWells = samples.reduce(
-                        (prev, curr, idx) => prev + samples[idx].length * reagents[idx].length * replications[idx],
-                        0
-                    );
-                    if (requiredWells > availableWells) {
-                        throw new Error('maxNumberOfPlates does not provide enough wells for experiments');
+                    break;
+                case 'samples':
+                    block.samples.forEach(s => {
+                        result.push(new Block([s], block.reagents, block.replications))
+                    })
+                    break;
+                case 'replications':
+                    for (let i = 0; i < block.replications; i++) {
+                        result.push(new Block(block.samples, block.reagents, 1))
                     }
-                };
+                    break;
+                default:
+                    result.push(block);
+            }
+            return result;
+        };
 
-                const PREFERRED_PACKING_X = ['replications', 'reagents'];
-                const PREFERRED_PACKING_Y = ['samples'];
-                class Block {
-                    constructor(samples, reagents, replications) {
-                        this.samples = samples;
-                        this.reagents = reagents;
-                        this.replications = replications;
-                        this.packX = PREFERRED_PACKING_X;
-                        this.packY = PREFERRED_PACKING_Y;
-                    }
-                    get x() {
-                        let x = 1;
-                        if (this.packX.indexOf('samples') >= 0) {
-                            x *= this.samples.length;
-                        }
-                        if (this.packX.indexOf('replications') >= 0) {
-                            x *= this.replications;
-                        }
-                        if (this.packX.indexOf('reagents') >= 0) {
-                            x *= this.reagents.length;
-                        }
-                        return x;
-                    }
-                    get y() {
-                        let y = 1;
-                        if (this.packY.indexOf('samples') >= 0) {
-                            y *= this.samples.length;
-                        }
-                        if (this.packY.indexOf('replications') >= 0) {
-                            y *= this.replications;
-                        }
-                        if (this.packY.indexOf('reagents') >= 0) {
-                            y *= this.reagents.length;
-                        }
-                        return y;
-                    }
-                    get area() {
-                        return this.x * this.y;
-                    }
-                }
+        const theFunction = (plateSize, samples, reagents, replications, maxNumberOfPlates) => {
+            // STEP 1: validate input
+            validateInput(plateSize, samples, reagents, replications, maxNumberOfPlates);
 
-                const splitBlock = (block, pack) => {
-                    assertType(block, 'Block');
-                    assertType(pack, 'String');
-                };
+            // Step 2: computerize
 
-                const theFunction = (plateSize, samples, reagents, replications, maxNumberOfPlates) => {
-                    // STEP 1: validate input
-                    validateInput(plateSize, samples, reagents, replications, maxNumberOfPlates);
+            // GENERATE BLOCKS and order by area descending
+            const blocks = [];
+            for (let i = 0; i < samples.length; i++) {
+                const block = new Block(samples[i], reagents[i], replications[i]);
+                blocks.push(block);
+            }
 
-                    // Step 2: computerize
+            // LOOP: sort, try pack
+            blocks.sort((a, b) => b.area - a.area);
+            // console.log(blocks);
 
-                    // GENERATE BLOCKS and order by area descending
-                    const blocks = [];
-                    for (let i = 0; i < samples.length; i++) {
-                        const block = new Block(samples[i], reagents[i], replications[i]);
-                        blocks.push(block);
-                    }
+            const level = new Level();
+            level.blocks = blocks;
+            console.log('asfsadf', level.width, level.height);
 
-                    // LOOP: sort, try pack
-                    blocks.sort((a, b) => b.area - a.area);
-                    // console.log(blocks);
-                    splitBlock(blocks[0], 'asdf');
+            // Step 3: return output
+            return { plateSize, samples, reagents, replications, maxNumberOfPlates };
+        };
 
-                    // Step 3: return output
-                    return { plateSize, samples, reagents, replications, maxNumberOfPlates };
-                };
+        window.onload = () => {
+            theFunction(
+                96,
+                [
+                    ['Sam 1', 'Sam 3', 'Sam 4'],
+                    ['Sam 1', 'Sam 2', 'Sam 3', 'Sam 4', 'Sam 5', 'Sam 6'],
+                ],
+                [
+                    ['Reag X', 'Reag Z'],
+                    ['Reag X', 'Reag Y', 'Reag Z'],
+                ],
+                [2, 3],
+                1
+            );
+        };
+    </script>
+</head>
 
-                theFunction(
-                    96,
-                    [
-                        ['Sam 1', 'Sam 3', 'Sam 4'],
-                        ['Sam 1', 'Sam 2', 'Sam 3', 'Sam 4', 'Sam 5'],
-                    ],
-                    [
-                        ['Reag X', 'Reag Z'],
-                        ['Reag X', 'Reag Y', 'Reag Z'],
-                    ],
-                    [2, 3],
-                    1
-                );
-            };
-        </script>
-    </head>
-    <body>
-        <p>Open console.</p>
-    </body>
+<body>
+    <p>Open console.</p>
+</body>
+
 </html>
